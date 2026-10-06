@@ -9,6 +9,7 @@
     "deploy": "wrangler deploy",
     "keys": "node scripts/gen-vapid.mjs",
     "icons": "node scripts/make-icons.mjs",
+    "fresh": "node scripts/fresh-drop.mjs",
     "test": "node --test \"tests/*.test.mjs\""
   },
   "devDependencies": {

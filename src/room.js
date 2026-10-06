@@ -80,6 +80,7 @@ export class Room extends DurableObject {
     super(ctx, env);
     this.S = null;
     this.daily = null;      // today's pack for this room's home time zone
+    this.dailyAt = 0;
     this.strokes = [];      // live doodle, saved with a debounce so a restart keeps it
     this.strokeTimer = 0;
     this.lastPoke = {};
@@ -318,7 +319,9 @@ export class Room extends DurableObject {
 
   async ensureDaily(now) {
     const key = dayKey(now, this.S.homeTz);
-    if (this.daily?.date === key) return;
+    // Re-check every 10 minutes so a pack regenerated mid-day shows up without a restart.
+    if (this.daily?.date === key && now - this.dailyAt < 10 * 60_000) return;
+    this.dailyAt = now;
     let pack = null;
     try {
       const raw = await this.env.DAILY?.get(`day:${key}`, 'json');

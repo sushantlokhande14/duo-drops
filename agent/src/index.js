@@ -50,14 +50,14 @@ async function askModel(env, model, date, recentThemes) {
   return sanitizeDaily(extractJson(out?.response ?? out), date);
 }
 
+// Themes from the week around this date, including the pack being replaced on a forced
+// re-run, so a "fresh" pack is actually fresh.
 async function recentThemes(env, date) {
-  const names = [];
   const base = Date.parse(`${date}T00:00:00Z`);
-  for (let i = 1; i <= 7; i++) {
-    const pack = await env.DAILY.get(`day:${utcDay(base - i * 864e5)}`, 'json');
-    if (pack?.theme?.name) names.push(pack.theme.name);
-  }
-  return names;
+  const keys = [];
+  for (let i = -2; i <= 7; i++) keys.push(`day:${utcDay(base - i * 864e5)}`);
+  const packs = await Promise.all(keys.map((k) => env.DAILY.get(k, 'json')));
+  return [...new Set(packs.map((p) => p?.theme?.name).filter(Boolean))];
 }
 
 export async function makePack(env, date) {
@@ -75,8 +75,8 @@ export async function makePack(env, date) {
   return { pack: fallbackDaily(date), errors };
 }
 
-async function ensureDay(env, date) {
-  if (await env.DAILY.get(`day:${date}`)) return { date, status: 'exists' };
+async function ensureDay(env, date, force = false) {
+  if (!force && (await env.DAILY.get(`day:${date}`))) return { date, status: 'exists' };
   const { pack, errors } = await makePack(env, date);
   await env.DAILY.put(`day:${date}`, JSON.stringify(pack), { expirationTtl: TTL });
   return { date, status: 'made', source: pack.source, model: pack.model ?? null, theme: pack.theme.name, errors };
@@ -96,8 +96,20 @@ export default {
     ctx.waitUntil(run(env));
   },
 
-  // Read-only peek at what the agent made. Generation only ever happens on the cron.
+  // GET: read-only peek at what the agent made.
+  // POST /run (owner only, needs the ADMIN_TOKEN secret): make a fresh pack right now,
+  // replacing the existing one. Body: {"dates": ["YYYY-MM-DD", ...]} (default: UTC today).
   async fetch(req, env) {
+    const url = new URL(req.url);
+    if (req.method === 'POST' && url.pathname === '/run') {
+      const auth = req.headers.get('Authorization') ?? '';
+      if (!env.ADMIN_TOKEN || auth !== `Bearer ${env.ADMIN_TOKEN}`) return Response.json({ error: 'not allowed' }, { status: 403 });
+      const body = await req.json().catch(() => ({}));
+      const dates = (Array.isArray(body.dates) ? body.dates : [utcDay()]).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).slice(0, 3);
+      const results = [];
+      for (const date of dates) results.push(await ensureDay(env, date, true));
+      return Response.json({ results });
+    }
     const today = utcDay();
     const [pack, lastRun] = await Promise.all([env.DAILY.get(`day:${today}`, 'json'), env.DAILY.get('agent:lastRun', 'json')]);
     return Response.json({ today: pack, lastRun }, { headers: { 'Cache-Control': 'no-store' } });
