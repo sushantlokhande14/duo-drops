@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "duo-drops",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-06-01",
+  "assets": { "directory": "./public" },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "Room" }]
+  },
+  // SQLite-backed Durable Objects are the ones included in the free plan.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "vars": {
+    // Push services want a contact for the sender. Change this to your own mailto: or site.
+    "VAPID_SUBJECT": "mailto:duo-drops@example.com"
+  }
+}
