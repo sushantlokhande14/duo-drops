@@ -1,5 +1,5 @@
 // Service worker: shows Drop / poke buzzes and keeps the app shell available offline.
-const CACHE = 'duo-drops-v1';
+const CACHE = 'duo-drops-v2';
 const SHELL = ['/', '/styles.css', '/app.js', '/core.js', '/fx.js', '/games-ui.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {

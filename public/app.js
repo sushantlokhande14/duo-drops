@@ -29,6 +29,10 @@ function localTime(zone) {
 function zoneHour(zone) {
   try { return Number(new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: 'numeric', hourCycle: 'h23' }).format(new Date())); } catch { return 12; }
 }
+// Secrets ride in the #fragment, which browsers never send to the server.
+const inviteLink = (s) => `${location.origin}/#join=${s.code}-${s.invite}`;
+const keyLink = () => `${location.origin}/#key=${st.me.code}.${st.me.token}`;
+const authHeaders = () => ({ Authorization: `Bearer ${st.me.token}` });
 const mmss = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const clock = (ts) => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const gameMeta = (kind) => st.s?.games.find((g) => g.kind === kind) ?? { title: kind, emoji: '🎲' };
@@ -55,7 +59,7 @@ const welcome = {
            <button class="linkish" data-act="noInvite" style="margin-top:8px;width:100%">start my own room instead</button>`
         : `<button class="btn big block" data-act="create">Create our room ✨</button>
            <details><summary>I have a code 🔑</summary>
-             <div class="row" style="margin-top:10px"><input id="codeIn" class="code-in" maxlength="6" placeholder="CODE" autocomplete="off" autocapitalize="characters"><button class="btn lav" style="flex:none" data-act="join">Join</button></div>
+             <div class="row" style="margin-top:10px"><input id="codeIn" class="code-in" maxlength="13" placeholder="ABC234-XYZ789" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="btn lav" style="flex:none" data-act="join">Join</button></div>
            </details>`}
     </div>
     <p class="muted center">Every day, surprise Drops land on both your phones.<br>Jump in together, play a tiny live game, keep your streak going 🔥</p>`,
@@ -65,15 +69,16 @@ const welcome = {
 const invite = {
   key: () => 'invite',
   html: (s) => {
-    const link = `${location.origin}/?r=${s.code}`;
+    const link = inviteLink(s);
     return `
       <div class="card invite pop">
         <div class="pair">${ava(P(s.me), 'lg bob')}<span class="dots">• • •</span><span class="ava lg ghost">?</span></div>
         <h2>Now invite your favorite person</h2>
-        <p class="muted">Send them this link. The moment they open it, your room comes alive ✨</p>
+        <p class="muted">Send them this private link. The moment they open it, your room comes alive ✨</p>
         <div class="linkbox">${esc(link)}</div>
         <button class="btn big block" data-act="share">Send the link 💌</button>
-        <p class="muted">or tell them the code <b class="code">${esc(s.code)}</b></p>
+        <p class="muted">or tell them the invite code<br><b class="code">${esc(s.code)}-${esc(s.invite)}</b></p>
+        <p class="muted small">Only someone with this code can join, and once they do the room locks to just you two 🔒</p>
       </div>
       <div class="card center stack">
         <p>While you wait: turn on buzzes so you feel it when they join and when Drops land 🔔</p>
@@ -111,9 +116,12 @@ const home = {
       <button class="btn big" data-act="openPlay">🎮 Play now</button>
       <button class="btn soft big" data-act="poke">💗 Poke</button>
     </div>
+    <section class="card task-card" data-r="task"></section>
     <section class="card" data-r="week"></section>
     <section class="card" data-r="today"></section>
-    <footer class="foot" data-r="foot"></footer>`,
+    <footer class="foot" data-r="foot"></footer>
+    <p class="muted center small">made with 💗 for one long-distance couple, open to all ·
+      <a href="https://github.com/sushantlokhande14/duo-drops" target="_blank" rel="noopener">source</a></p>`,
   regions(s) {
     const me = s.me, o = other(me), you = P(o), st_ = s.stats;
     const both = P(me).online && you.online;
@@ -130,7 +138,21 @@ const home = {
         ${whoHtml(o, s)}`,
       chips: `<span class="chip">🔥 ${st_.streak} <small>day streak</small></span>
         <span class="chip">💗 ${st_.love} <small>love</small></span>
-        <span class="chip">✨ ${s.upcoming} <small>drops coming</small></span>`,
+        <span class="chip">✨ ${s.upcoming} <small>drops coming</small></span>
+        <span class="chip">${esc(s.daily.theme.emoji)} <small>today:</small> ${esc(s.daily.theme.name)}</span>`,
+      task: (() => {
+        const t = s.daily.task;
+        const status = t.mine && t.partner ? 'done together! +30 💗'
+          : t.mine ? `waiting for ${esc(you.name)} ${esc(you.avatar)}…`
+          : t.partner ? `${esc(you.name)} already did it, your turn! 👀` : 'do it, then tap done. Both done = +30 💗';
+        return `<div class="task-top"><span class="task-em bob">${esc(t.emoji)}</span><div><span class="kicker-l">today's little task</span><h3>${esc(t.title)}</h3></div></div>
+          <p>${esc(t.body)}</p>
+          <div class="task-row">
+            <span class="task-checks"><span class="${t.mine ? 'on' : ''}">${esc(P(me).avatar)}</span><span class="${t.partner ? 'on' : ''}">${esc(you.avatar)}</span></span>
+            ${t.mine ? `<span class="muted">${status}</span>` : `<button class="btn mint small" data-act="taskDone">✅ I did it</button>`}
+          </div>
+          ${!t.mine ? `<p class="muted small">${status}</p>` : ''}`;
+      })(),
       next: missedRecent
         ? `<div class="art">🥺</div><div><h3>Aww, a Drop slipped by</h3><p class="muted">Another one is on its way. Turn on buzzes so you feel the next one 🔔</p></div>`
         : `<div class="art bob">☁️</div><div><h3>A surprise Drop could land any minute ✨</h3>
@@ -144,7 +166,7 @@ const home = {
         ${lw ? `<p class="muted" style="margin-top:8px">Last week: ${lw.champ ? `👑 ${esc(P(lw.champ).name)} won ${Math.max(lw.A, lw.B)} to ${Math.min(lw.A, lw.B)}` : `a ${lw.A}–${lw.B} tie 🤝`}</p>` : ''}`,
       today: `<h3>Today's drops 📅</h3>${today.length
         ? `<ul class="today-list">${today.map((h) => {
-            const g = gameMeta(h.kind);
+            const g = h.title ? { title: h.title, emoji: h.emoji } : gameMeta(h.kind);
             if (h.status === 'missed') return `<li class="missed"><span class="em">${g.emoji}</span><span class="tx">${esc(g.title)}<small>missed at ${clock(h.at)} 🥺</small></span></li>`;
             const w = h.winner ? ` · 👑 ${esc(P(h.winner).name)}` : '';
             return `<li><span class="em">${g.emoji}</span><span class="tx">${esc(g.title)}${h.bonus ? ' <small style="display:inline">bonus</small>' : ''}<small>${esc(h.summary)}${w}</small></span><span class="gain">+${h.love} 💗</span></li>`;
@@ -192,13 +214,16 @@ const result = {
   key: (s) => `result:${s.drop.id}`,
   html: (s) => {
     const d = s.drop, r = d.result, me = s.me;
-    const headline = { meld: r.highlights.filter((h) => h.match).length >= 3 ? 'Two minds, one brain 🧠' : 'Mind Meld done!', duel: r.winner ? (r.winner === me ? 'You won the duel! 🏆' : `${esc(P(r.winner).name)} won the duel!`) : "It's a tie 🤝", draw: 'Art class dismissed 🎨' }[d.kind];
+    const headline = { meld: r.highlights.filter((h) => h.match).length >= 3 ? 'Two minds, one brain 🧠' : 'Mind Meld done!', duel: r.winner ? (r.winner === me ? 'You won the duel! 🏆' : `${esc(P(r.winner).name)} won the duel!`) : "It's a tie 🤝", draw: 'Art class dismissed 🎨', special: `${esc(d.title)} done!` }[d.kind];
     let hl = '';
     if (d.kind === 'meld') {
       hl = r.highlights.map((h) => `<li class="${h.match ? 'yay' : ''}"><span class="grow"><span class="q">${esc(h.prompt)}</span>${esc(P(me).avatar)} ${esc(h[me] ?? '…')} · ${esc(P(other(me)).avatar)} ${esc(h[other(me)] ?? '…')}</span>${h.match ? '✨' : ''}</li>`).join('');
     } else if (d.kind === 'duel') {
       const names = { scramble: '🔤 unscramble', math: '🧮 quick maths', count: '🔢 counting', odd: '🔍 odd one out', react: '💗 reaction' };
       hl = r.highlights.map((h) => `<li><span class="grow">${names[h.kind]}</span>${h.winner ? `${esc(P(h.winner).avatar)} 👑` : '😴'}</li>`).join('');
+    } else if (d.kind === 'special') {
+      const pickOf = (h, slot) => (h[slot] == null ? '⏰' : esc(h.pair[h[slot]]));
+      hl = r.highlights.map((h) => `<li class="${h.match ? 'yay' : ''}"><span class="grow"><span class="q">${esc(h.pair[0])} or ${esc(h.pair[1])}</span>${esc(P(me).avatar)} ${pickOf(h, me)} · ${esc(P(other(me)).avatar)} ${pickOf(h, other(me))}</span>${h.match ? '💞' : ''}</li>`).join('');
     } else {
       hl = r.highlights.map((h) => `<li class="${h.solved ? 'yay' : ''}"><span class="grow">${esc(P(h.drawer).avatar)} drew <b>${esc(h.word)}</b></span>${h.solved ? `${h.secs}s ✅` : '🙈'}</li>`).join('');
     }
@@ -328,7 +353,14 @@ function settingsSheet() {
     <hr style="border:0;border-top:2px dashed var(--line);margin:22px 0">
     <p class="muted">Room code <b>${esc(s.code)}</b>. To use Duo Drops on another device of yours, copy your secret link and open it there. Don't share it, it's your key 🔑</p>
     <div style="height:10px"></div>
-    <div class="row"><button class="btn soft small" data-act="copyKey">🔑 copy my secret link</button><button class="btn soft small" data-act="leave">👋 log out here</button></div>`);
+    <div class="row"><button class="btn soft small" data-act="copyKey">🔑 copy my secret link</button><button class="btn soft small" data-act="leave">👋 log out here</button></div>
+    <hr style="border:0;border-top:2px dashed var(--line);margin:22px 0">
+    <h3>Privacy 🔒</h3>
+    <p class="muted" style="margin-top:6px">Your room only stores your names, critters, time zones, scores and game history. No emails, no accounts, no tracking.
+      Your partner sees your name, critter, local time and whether you're online, never your device key.
+      Rooms nobody opens for 4 months delete themselves.</p>
+    <div style="height:12px"></div>
+    <button class="btn soft small block danger" data-act="deleteRoom">🗑️ delete our room forever</button>`);
   document.getElementById('setPer').addEventListener('input', (e) => { document.getElementById('perOut').textContent = e.target.value; });
 }
 
@@ -386,7 +418,8 @@ function connect() {
   clearTimeout(retryTimer);
   if (!st.me || (st.ws && st.ws.readyState <= 1)) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/api/rooms/${st.me.code}/ws?token=${encodeURIComponent(st.me.token)}`);
+  // The device key goes in the subprotocol header, not the URL.
+  const ws = new WebSocket(`${proto}://${location.host}/api/rooms/${st.me.code}/ws`, ['duo', st.me.token]);
   st.ws = ws;
   ws.onopen = () => {
     retry = 0;
@@ -429,6 +462,14 @@ function onMessage(m) {
     sfx.pop();
     burst(innerWidth / 2, innerHeight - 140, 8);
     toastText('poke sent 💗');
+  } else if (m.t === 'deleted') {
+    store('duo:me', null);
+    st.me = null;
+    st.s = null;
+    st.ws = null;
+    closeSheet();
+    toastText(`${m.reason} 👋`, 4000);
+    render();
   } else if (m.t === 'nope') {
     nope();
   } else if (m.t === 'draw' || m.t === 'strokes') {
@@ -470,13 +511,13 @@ const actions = {
   pickAva: (el) => { ui.pickAva = el.dataset.a; sfx.pop(); patch(app, welcome.regions()); },
   create: () => enterRoom('/api/rooms', {}),
   join: () => {
-    const code = (ui.joinCode || $('#codeIn')?.value || '').trim().toUpperCase();
-    if (!/^[A-Z0-9]{6}$/.test(code)) { shake($('#codeIn')); return toastText('room codes are 6 letters/numbers 🔑'); }
-    enterRoom(`/api/rooms/${code}/join`, {});
+    const m = (ui.joinCode || $('#codeIn')?.value || '').trim().toUpperCase().replace(/\s+/g, '').match(/^([A-Z0-9]{6})-?([A-Z0-9]{6})$/);
+    if (!m) { shake($('#codeIn')); return toastText('invite codes look like ABC234-XYZ789 🔑'); }
+    enterRoom(`/api/rooms/${m[1]}/join`, { invite: m[2] });
   },
   noInvite: () => { ui.joinCode = null; history.replaceState(null, '', '/'); render(); },
   share: async () => {
-    const link = `${location.origin}/?r=${st.s.code}`;
+    const link = inviteLink(st.s);
     const text = `Come play with me on Duo Drops 💌 ${link}`;
     try {
       if (navigator.share) await navigator.share({ title: 'Duo Drops', text: 'Come play with me on Duo Drops 💌', url: link });
@@ -484,6 +525,11 @@ const actions = {
     } catch {}
   },
   ready: () => { sfx.pop(); send({ t: 'ready' }); },
+  taskDone: () => { sfx.ding(); burst(innerWidth / 2, innerHeight / 2, 12, ['✅', '💗', '✨']); send({ t: 'task' }); },
+  deleteRoom: () => {
+    if (!confirm('Delete your room for both of you? Scores, streaks and history are erased forever. 🥺')) return;
+    send({ t: 'deleteRoom' });
+  },
   openPlay: () => {
     if (st.s.drop?.status === 'done') { st.dismissed.add(st.s.drop.id); saveDismissed(); }
     playSheet();
@@ -505,7 +551,7 @@ const actions = {
   },
   copyKey: async () => {
     try {
-      await navigator.clipboard.writeText(`${location.origin}/?r=${st.me.code}&k=${st.me.token}`);
+      await navigator.clipboard.writeText(keyLink());
       toastText('secret link copied 🔑 open it on your other device');
     } catch { toastText("couldn't copy 😿"); }
   },
@@ -545,22 +591,21 @@ addEventListener('online', connect);
 async function boot() {
   floatSky();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-  const params = new URLSearchParams(location.search);
-  const r = params.get('r')?.toUpperCase();
-  const k = params.get('k');
-  if (r && k) {
-    st.me = { code: r, token: k };
+  // #join=CODE-INVITE (invite link) or #key=CODE.TOKEN (your own secret link for another device)
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const join = hash.get('join')?.toUpperCase().match(/^([A-Z0-9]{6})-([A-Z0-9]{6})$/);
+  const key = hash.get('key')?.match(/^([A-Z0-9]{6})\.([0-9a-f-]{36})$/i);
+  if (location.hash) history.replaceState(null, '', '/');
+  if (key) {
+    st.me = { code: key[1].toUpperCase(), token: key[2] };
     store('duo:me', st.me);
-    history.replaceState(null, '', '/');
-  } else if (r && st.me?.code !== r) {
-    ui.joinCode = r;
-  } else if (r) {
-    history.replaceState(null, '', '/');
+  } else if (join && st.me?.code !== join[1]) {
+    ui.joinCode = `${join[1]}-${join[2]}`;
   }
 
   if (st.me && !ui.joinCode) {
     try {
-      const res = await fetch(`/api/rooms/${st.me.code}/me?token=${encodeURIComponent(st.me.token)}`);
+      const res = await fetch(`/api/rooms/${st.me.code}/me`, { headers: authHeaders() });
       if (res.status === 401 || res.status === 404) {
         const j = await res.json().catch(() => ({}));
         toastText(j.error || 'that room is gone 🥺', 4000);

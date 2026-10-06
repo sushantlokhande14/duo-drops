@@ -317,4 +317,60 @@ function drawReveal(g, solved, api) {
   g.deadline = api.now + DRAW_REVEAL_MS;
 }
 
-export const GAMES = { meld, duel, draw };
+// ---------------------------------------------------------------- Today's Special (This or That)
+// The pairs come from the daily pack the agent writes, so this game is new every day.
+
+const PICK_MS = 15_000, PICK_REVEAL_MS = 4_000;
+
+const special = {
+  title: "Today's Special",
+  emoji: '✨',
+  blurb: 'A brand new This or That, made fresh today. Pick the same side to win love points!',
+  init(api) {
+    const sp = api.daily.special;
+    return {
+      title: sp.title, emoji: sp.emoji, pairs: sp.pairs.slice(0, 6), round: 0, phase: 'pick',
+      picks: { A: null, B: null }, deadline: api.now + PICK_MS, log: [],
+    };
+  },
+  act(g, slot, m, api) {
+    const i = Number(m.i);
+    if (m.a !== 'pick' || g.phase !== 'pick' || g.picks[slot] != null || (i !== 0 && i !== 1)) return;
+    g.picks[slot] = i;
+    if (g.picks.A != null && g.picks.B != null) specialReveal(g, api);
+  },
+  tick(g, api) {
+    if (g.phase === 'pick') return specialReveal(g, api);
+    g.round++;
+    if (g.round < g.pairs.length) {
+      g.phase = 'pick';
+      g.picks = { A: null, B: null };
+      g.deadline = api.now + PICK_MS;
+      return;
+    }
+    const same = g.log.filter((l) => l.match).length;
+    g.over = true;
+    g.deadline = null;
+    g.result = {
+      love: 10 + same * 12, duel: { A: 0, B: 0 }, winner: null,
+      summary: `${same}/${g.pairs.length} same picks${same >= g.pairs.length - 1 ? ', soulmates 💞' : same <= 1 ? ', opposites attract 🧲' : ''}`,
+      highlights: g.log,
+    };
+  },
+  view(g, slot) {
+    return {
+      title: g.title, emoji: g.emoji, round: g.round, rounds: g.pairs.length, pair: g.pairs[g.round],
+      phase: g.phase, deadline: g.deadline, mine: g.picks[slot], partnerIn: g.picks[other(slot)] != null,
+      reveal: g.phase === 'reveal' ? g.log[g.log.length - 1] : null, same: g.log.filter((l) => l.match).length,
+    };
+  },
+};
+
+function specialReveal(g, api) {
+  const { A, B } = g.picks;
+  g.log.push({ pair: g.pairs[g.round], A, B, match: A != null && A === B });
+  g.phase = 'reveal';
+  g.deadline = api.now + PICK_REVEAL_MS;
+}
+
+export const GAMES = { meld, duel, draw, special };

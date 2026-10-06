@@ -9,8 +9,14 @@
   },
   // SQLite-backed Durable Objects are the ones included in the free plan.
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // Daily packs written by the agent in agent/. Forks: create your own with
+  // `npx wrangler kv namespace create DAILY` and paste the id here and in agent/wrangler.jsonc.
+  "kv_namespaces": [{ "binding": "DAILY", "id": "7fd4f578e5f449339cd4cfc3a55f8fd7" }],
+  // Per-IP limit for creating/joining rooms.
+  "ratelimits": [{ "name": "LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } }],
+  "observability": { "enabled": true },
   "vars": {
-    // Push services want a contact for the sender. Change this to your own mailto: or site.
-    "VAPID_SUBJECT": "mailto:duo-drops@example.com"
+    // Push services want a contact for the sender: a mailto: or an https URL you own.
+    "VAPID_SUBJECT": "https://github.com/sushantlokhande14/duo-drops"
   }
 }

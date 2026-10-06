@@ -42,6 +42,41 @@ const meld = {
   },
 };
 
+// ---------------------------------------------------------------- Today's Special (This or That)
+
+const special = {
+  key: (d, g) => `special:${g.round}:${g.phase}`,
+  html(d, g, s) {
+    const me = s.me, o = other(me);
+    const head = top(`${esc(g.emoji)} ${esc(g.title)}`, [`${g.round + 1}/${g.rounds}`, `💞 ${g.same}`]);
+    if (g.phase === 'pick') {
+      return `${head}${bar(g.deadline, 15000)}
+        <div class="kicker">same pick = love points</div>
+        <div class="tot" data-r="pick"></div>
+        <div class="partner-status" data-r="partner"></div>`;
+    }
+    const r = g.reveal;
+    const side = (slot) => `<div class="bubble pop">${ava(P(slot))}<div class="txt">${r[slot] == null ? '⏰' : esc(r.pair[r[slot]])}</div></div>`;
+    return `${head}${bar(g.deadline, 4000)}
+      <div class="card prompt-card"><div class="prompt small">${esc(r.pair[0])} <span class="or">or</span> ${esc(r.pair[1])}</div></div>
+      <div class="bubbles">${side(me)}${side(o)}</div>
+      <div class="verdict ${r.match ? 'yay' : ''}">${r.match ? 'SAME! 💞' : r.A == null || r.B == null ? "time's up ⏰" : 'opposites attract 😌'}</div>`;
+  },
+  regions(d, g, s) {
+    if (g.phase !== 'pick') return {};
+    const you = P(other(s.me));
+    const card = (i) => `<button class="tot-card ${g.mine === i ? 'on' : ''} ${g.mine != null && g.mine !== i ? 'off' : ''}" data-act="totPick" data-i="${i}" ${g.mine != null ? 'disabled' : ''}>${esc(g.pair[i])}</button>`;
+    return {
+      pick: `${card(0)}<span class="tot-or">or</span>${card(1)}`,
+      partner: `${ava(you, 'sm')} ${esc(you.name)} ${g.partnerIn ? 'picked! 🤫' : 'is choosing… 💭'}`,
+    };
+  },
+  mount(root, d, g) {
+    if (g.phase !== 'reveal') return;
+    if (g.reveal.match) { burst(); sfx.ding(); buzz([30, 40, 30]); } else sfx.boop();
+  },
+};
+
 // ---------------------------------------------------------------- Speed Duel
 
 let react = null;
@@ -286,10 +321,12 @@ function padMove(e) {
     pad.pend.push(p);
   }
   drawStroke(s, s.pts.length - pad.pend.length);
-  if (!pad.raf) pad.raf = requestAnimationFrame(padFlush);
+  // Batch points: one message per ~50ms keeps the free-tier request count low.
+  if (!pad.raf) pad.raf = setTimeout(padFlush, 50);
 }
 
 function padFlush() {
+  clearTimeout(pad.raf);
   pad.raf = 0;
   if (pad.cur && pad.pend.length) {
     send({ t: 'draw', op: 'pts', id: pad.cur.id, pts: pad.pend });
@@ -322,6 +359,7 @@ export function padMessage(m) {
 export const gameActions = {
   duelAns: (el) => { sfx.tap(); send({ t: 'act', a: 'answer', v: el.dataset.v }); },
   pickWord: (el) => { sfx.pop(); send({ t: 'act', a: 'pick', i: Number(el.dataset.i) }); },
+  totPick: (el) => { sfx.pop(); buzz([15]); send({ t: 'act', a: 'pick', i: Number(el.dataset.i) }); },
   color: (el) => { pad.color = el.dataset.c; document.querySelectorAll('.sw').forEach((b) => b.classList.toggle('on', b === el)); },
   size: (el) => { pad.width = Number(el.dataset.w); document.querySelectorAll('.sz').forEach((b) => b.classList.toggle('on', b === el)); },
   undo: () => { if (pad.strokes.length) { pad.strokes.pop(); padRedraw(); send({ t: 'draw', op: 'undo' }); } },
@@ -346,4 +384,4 @@ export function nope() {
   setTimeout(() => form?.querySelector('input')?.focus(), 1220);
 }
 
-export const gameScreens = { meld, duel, draw };
+export const gameScreens = { meld, duel, draw, special };

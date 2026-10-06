@@ -1,0 +1,13 @@
+{
+  // The daily agent: a separate Worker that wakes up every day, asks Workers AI (free tier)
+  // to invent a fresh theme, a little task and a new This-or-That game, checks it, and
+  // stores it where the Duo Drops app picks it up.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "duo-drops-daily",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  "triggers": { "crons": ["7 0 * * *", "7 12 * * *"] },
+  "ai": { "binding": "AI" },
+  "kv_namespaces": [{ "binding": "DAILY", "id": "7fd4f578e5f449339cd4cfc3a55f8fd7" }],
+  "observability": { "enabled": true }
+}
